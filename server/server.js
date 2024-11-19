@@ -11,7 +11,7 @@ console.log('config.js:\n%s', JSON.stringify(config, null, '  '));
 /* eslint-enable no-console */
 
 const fs = require('fs');
-const https = require('https');
+const http = require('http'); // Changed from https to http
 const url = require('url');
 const protoo = require('protoo-server');
 const mediasoup = require('mediasoup');
@@ -34,9 +34,9 @@ const queue = new AwaitQueue();
 // @type {Map<Number, Room>}
 const rooms = new Map();
 
-// HTTPS server.
-// @type {https.Server}
-let httpsServer;
+// HTTP server.
+// @type {http.Server} // Changed from https.Server
+let httpServer;
 
 // Express application.
 // @type {Function}
@@ -71,8 +71,8 @@ async function run()
 	// Create Express app.
 	await createExpressApp();
 
-	// Run HTTPS server.
-	await runHttpsServer();
+	// Run HTTP server (not HTTPS now).
+	await runHttpServer(); // Changed to runHttpServer()
 
 	// Run a protoo WebSocketServer.
 	await runProtooWebSocketServer();
@@ -271,35 +271,7 @@ async function createExpressApp()
 				next(error);
 			}
 		});
-
-	/**
-	 * POST API to connect a Transport belonging to a Broadcaster. Not needed
-	 * for PlainTransport if it was created with comedia option set to true.
-	 */
-	expressApp.post(
-		'/rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/connect',
-		async (req, res, next) =>
-		{
-			const { broadcasterId, transportId } = req.params;
-			const { dtlsParameters } = req.body;
-
-			try
-			{
-				const data = await req.room.connectBroadcasterTransport(
-					{
-						broadcasterId,
-						transportId,
-						dtlsParameters
-					});
-
-				res.status(200).json(data);
-			}
-			catch (error)
-			{
-				next(error);
-			}
-		});
-
+	
 	/**
 	 * POST API to create a mediasoup Producer associated to a Broadcaster.
 	 * The exact Transport in which the Producer must be created is signaled in
@@ -330,98 +302,7 @@ async function createExpressApp()
 				next(error);
 			}
 		});
-
-	/**
-	 * POST API to create a mediasoup Consumer associated to a Broadcaster.
-	 * The exact Transport in which the Consumer must be created is signaled in
-	 * the URL path. Query parameters must include the desired producerId to
-	 * consume.
-	 */
-	expressApp.post(
-		'/rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/consume',
-		async (req, res, next) =>
-		{
-			const { broadcasterId, transportId } = req.params;
-			const { producerId } = req.query;
-
-			try
-			{
-				const data = await req.room.createBroadcasterConsumer(
-					{
-						broadcasterId,
-						transportId,
-						producerId
-					});
-
-				res.status(200).json(data);
-			}
-			catch (error)
-			{
-				next(error);
-			}
-		});
-
-	/**
-	 * POST API to create a mediasoup DataConsumer associated to a Broadcaster.
-	 * The exact Transport in which the DataConsumer must be created is signaled in
-	 * the URL path. Query body must include the desired producerId to
-	 * consume.
-	 */
-	expressApp.post(
-		'/rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/consume/data',
-		async (req, res, next) =>
-		{
-			const { broadcasterId, transportId } = req.params;
-			const { dataProducerId } = req.body;
-
-			try
-			{
-				const data = await req.room.createBroadcasterDataConsumer(
-					{
-						broadcasterId,
-						transportId,
-						dataProducerId
-					});
-
-				res.status(200).json(data);
-			}
-			catch (error)
-			{
-				next(error);
-			}
-		});
 	
-	/**
-	 * POST API to create a mediasoup DataProducer associated to a Broadcaster.
-	 * The exact Transport in which the DataProducer must be created is signaled in
-	 */
-	expressApp.post(
-		'/rooms/:roomId/broadcasters/:broadcasterId/transports/:transportId/produce/data',
-		async (req, res, next) =>
-		{
-			const { broadcasterId, transportId } = req.params;
-			const { label, protocol, sctpStreamParameters, appData } = req.body;
-
-			try
-			{
-				const data = await req.room.createBroadcasterDataProducer(
-					{
-						broadcasterId,
-						transportId,
-						label,
-						protocol,
-						sctpStreamParameters,
-						appData
-					});
-
-				res.status(200).json(data);
-			}
-			catch (error)
-			{
-				next(error);
-			}
-		});
-
 	/**
 	 * Error handler.
 	 */
@@ -445,26 +326,20 @@ async function createExpressApp()
 }
 
 /**
- * Create a Node.js HTTPS server. It listens in the IP and port given in the
+ * Create a Node.js HTTP server. It listens in the IP and port given in the
  * configuration file and reuses the Express application as request listener.
  */
-async function runHttpsServer()
+async function runHttpServer()
 {
-	logger.info('running an HTTPS server...');
+	logger.info('running an HTTP server...'); // Adjusted log message
 
-	// HTTPS server for the protoo WebSocket server.
-	const tls =
-	{
-		cert : fs.readFileSync(config.https.tls.cert),
-		key  : fs.readFileSync(config.https.tls.key)
-	};
-
-	httpsServer = https.createServer(tls, expressApp);
+	// HTTP server for the protoo WebSocket server.
+	httpServer = http.createServer(expressApp); // Changed from https.createServer
 
 	await new Promise((resolve) =>
 	{
-		httpsServer.listen(
-			Number(config.https.listenPort), config.https.listenIp, resolve);
+		httpServer.listen(
+			Number(config.https.listenPort), config.https.listenIp, resolve); // Same port configuration
 	});
 }
 
@@ -476,7 +351,7 @@ async function runProtooWebSocketServer()
 	logger.info('running protoo WebSocketServer...');
 
 	// Create the protoo WebSocket server.
-	protooWebSocketServer = new protoo.WebSocketServer(httpsServer,
+	protooWebSocketServer = new protoo.WebSocketServer(httpServer,  // Adjusted to use httpServer
 		{
 			maxReceivedFrameSize     : 960000, // 960 KBytes.
 			maxReceivedMessageSize   : 960000,
